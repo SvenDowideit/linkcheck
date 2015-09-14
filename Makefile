@@ -19,7 +19,5 @@ docker:
 	docker rm linkcheck-build
 	gunzip linkcheck.gz
 
-test: build
-	rm -rf examples/blog/banana
-	cd examples/blog ; \
-	../../hugo --verboseLog=true -v=true --log=true -d ./banana/  --stepAnalysis server
+run:
+	./linkcheck -root=http://10.10.10.20:8000 -verbose
