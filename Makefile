@@ -20,4 +20,4 @@ docker:
 	gunzip linkcheck.gz
 
 run:
-	./linkcheck -root=http://10.10.10.20:8000 -verbose
+	./linkcheck http://10.10.10.20:8000
