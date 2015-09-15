@@ -27,6 +27,7 @@ func getHref(t html.Token) (ok bool, href string) {
 type UrlResponse struct {
 	url string
 	code int
+	err error
 }
 
 type NewUrl struct {
@@ -34,36 +35,59 @@ type NewUrl struct {
 	url string
 }
 
+type FoundUrls struct {
+	response int
+	usageCount int
+	err error
+	// list of pages that refer to the link?
+}
+var foundUrls = make(map[string]FoundUrls)
+var count int
+
+func crawl(ch chan NewUrl, chFinished chan UrlResponse) {
+	for true {
+		new := <- ch
+		crawlOne(new, ch, chFinished)
+	}
+}
 
 // Extract all http** links from a given webpage
-func crawl(reqUrl string, ch chan NewUrl, chFinished chan UrlResponse) {
-	base, err := url.Parse(reqUrl)
+func crawlOne(req NewUrl, ch chan NewUrl, chFinished chan UrlResponse) {
+	base, err := url.Parse(req.url)
 	reply := UrlResponse {
-		url: reqUrl,
+		url: req.url,
 		code: 999,
 	}
 	if err != nil {
-		fmt.Println("ERROR: failed to Parse \"" + reqUrl + "\"")
+		fmt.Println("ERROR: failed to Parse \"" + req.url + "\"")
+		reply.err = err
 		chFinished <- reply
 		return
 	}
-	resp, err := http.Get(reqUrl)
+	resp, err := http.Get(req.url)
 	if err != nil {
-		fmt.Println("ERROR: Failed to crawl \"" + reqUrl + "\"  " + err.Error())
+		fmt.Println("ERROR: Failed to crawl \"" + req.url + "\"  " + err.Error())
+		reply.err = err
 		chFinished <- reply
 		return
 	}
 	defer func() {
 		// Notify that we're done after this function
 		reply.code = resp.StatusCode
+		reply.err = fmt.Errorf("from %s", req.from)
 		chFinished <- reply
 	}()
 
 
-	fmt.Println("\t crawled \"" + reqUrl + "\"")
+	//fmt.Println("\t crawled \"" + req.url + "\"")
 
 	b := resp.Body
 	defer b.Close() // close Body when the function returns
+
+	// only parse if this page is on the original site
+	if ! strings.HasPrefix(req.url, seedUrl) {
+		return
+	}
 
 	z := html.NewTokenizer(b)
 
@@ -94,56 +118,54 @@ func crawl(reqUrl string, ch chan NewUrl, chFinished chan UrlResponse) {
 				continue
 			}
 			new := NewUrl{
-				from: reqUrl,
+				from: req.url,
 				url: base.ResolveReference(u).String(),
 				}
+		// TODO: contemplate cacheing the html, or parse result to enable checking for anchor existance
+		if f, ok := foundUrls[new.url]; !ok {
+			count++
+			foundUrls[new.url] = FoundUrls{
+				usageCount: 1,
+				response:   0,
+			}
 			ch <- new
+			//fmt.Printf("(%d)", len(ch))
+		} else {
+			f.usageCount++
+			foundUrls[new.url] = f
+		}
 		}
 	}
 }
 
-type FoundUrls struct {
-	response int
-	usageCount int
-	// list of pages that refer to the link?
-}
-
+var seedUrl = os.Args[1]
 func main() {
-	foundUrls := make(map[string]FoundUrls)
 	seedUrls := os.Args[1:]
 
 	// Channels
-	chUrls := make(chan NewUrl)
+	chUrls := make(chan NewUrl, 100000)
 	chFinished := make(chan UrlResponse)
 
-	// Kick off the crawl process (concurrently)
+	for w := 1; w <= 10; w++ {
+		go crawl(chUrls, chFinished)
+	}
+
 	for _, url := range seedUrls {
-					foundUrls[url] = FoundUrls{
-						usageCount: 1,
-						response:   0,
-					}
-		go crawl(url, chUrls, chFinished)
+			new := NewUrl{
+				from: "",
+				url: url,
+			}
+			chUrls <- new
 	}
 
 	// Subscribe to both channels
-	count := len(seedUrls)
+	count = len(seedUrls)
 	for c := 0; c < count; {
 		select {
-		case new := <-chUrls:
-			if _, ok := foundUrls[new.url] ; !ok {
-				if strings.HasPrefix(new.from, seedUrls[0]) {
-					count++
-					foundUrls[new.url] = FoundUrls{
-						usageCount: 1,
-						response:   0,
-					}
-					// TODO: you're kidding right - lets not make an infinite number of cawlers?
-					go crawl(new.url, chUrls, chFinished)
-				}
-			}
 		case ret := <-chFinished:
 			info := foundUrls[ret.url]
 			info.response = ret.code
+			info.err = ret.err
 			foundUrls[ret.url] = info
 			c++
 		}
@@ -155,6 +177,7 @@ func main() {
 		summary[info.response]++
 		if info.response != 200 {
 			fmt.Printf(" - %d: %s\n", info.response, url)
+			fmt.Printf("\t%s\n", info.err)
 		}
 	}
 	fmt.Println("\nFound", len(foundUrls), "unique urls\n")

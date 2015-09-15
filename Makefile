@@ -20,7 +20,7 @@ docker:
 	gunzip linkcheck.gz
 
 run:
-	./linkcheck http://10.10.10.20:8000
+	./linkcheck http://10.10.10.20:8000/
 
 post:
 	./linkcheck https://docs.docker.com
