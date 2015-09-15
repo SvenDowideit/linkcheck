@@ -102,8 +102,14 @@ func crawl(reqUrl string, ch chan NewUrl, chFinished chan UrlResponse) {
 	}
 }
 
+type FoundUrls struct {
+	response int
+	usageCount int
+	// list of pages that refer to the link?
+}
+
 func main() {
-	foundUrls := make(map[string]int)
+	foundUrls := make(map[string]FoundUrls)
 	seedUrls := os.Args[1:]
 
 	// Channels
@@ -112,7 +118,10 @@ func main() {
 
 	// Kick off the crawl process (concurrently)
 	for _, url := range seedUrls {
-		foundUrls[url] = 0
+					foundUrls[url] = FoundUrls{
+						usageCount: 1,
+						response:   0,
+					}
 		go crawl(url, chUrls, chFinished)
 	}
 
@@ -122,25 +131,36 @@ func main() {
 		select {
 		case new := <-chUrls:
 			if _, ok := foundUrls[new.url] ; !ok {
-				// TODO: need to stick to only the site we're testing plus one
 				if strings.HasPrefix(new.from, seedUrls[0]) {
-				count++
-				// TODO: you're kidding right - lets not make an infinite number of cawlers?
-				go crawl(new.url, chUrls, chFinished)
-				foundUrls[new.url] = 0
+					count++
+					foundUrls[new.url] = FoundUrls{
+						usageCount: 1,
+						response:   0,
+					}
+					// TODO: you're kidding right - lets not make an infinite number of cawlers?
+					go crawl(new.url, chUrls, chFinished)
 				}
 			}
 		case ret := <-chFinished:
-			foundUrls[ret.url] = ret.code
+			info := foundUrls[ret.url]
+			info.response = ret.code
+			foundUrls[ret.url] = info
 			c++
 		}
 	}
 
 	// We're done! Print the results...
-	for url, code := range foundUrls {
-		fmt.Printf(" - %d: %s\n", code, url)
+	summary := make(map[int]int)
+	for url, info := range foundUrls {
+		summary[info.response]++
+		if info.response != 200 {
+			fmt.Printf(" - %d: %s\n", info.response, url)
+		}
 	}
-	fmt.Println("\nFound", len(foundUrls), "unique urls:\n")
+	fmt.Println("\nFound", len(foundUrls), "unique urls\n")
+	for code, count := range summary {
+		fmt.Printf("\tStatus %d : %d\n", code, count)
+	}
 
 	close(chUrls)
 }

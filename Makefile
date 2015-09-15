@@ -21,3 +21,6 @@ docker:
 
 run:
 	./linkcheck http://10.10.10.20:8000
+
+post:
+	./linkcheck https://docs.docker.com
