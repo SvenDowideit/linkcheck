@@ -43,11 +43,10 @@ type FoundUrls struct {
 }
 
 var foundUrls = make(map[string]FoundUrls)
-var count int
 
-func crawl(ch chan NewUrl, chFinished chan UrlResponse) {
+func crawl(chWork chan NewUrl, ch chan NewUrl, chFinished chan UrlResponse) {
 	for true {
-		new := <-ch
+		new := <-chWork
 		crawlOne(new, ch, chFinished)
 	}
 }
@@ -129,19 +128,7 @@ func crawlOne(req NewUrl, ch chan NewUrl, chFinished chan UrlResponse) {
 				from: req.url,
 				url:  base.ResolveReference(u).String(),
 			}
-			// TODO: contemplate cacheing the html, or parse result to enable checking for anchor existance
-			if f, ok := foundUrls[new.url]; !ok {
-				count++
-				foundUrls[new.url] = FoundUrls{
-					usageCount: 1,
-					response:   0,
-				}
-				ch <- new
-				//fmt.Printf("(%d)", len(ch))
-			} else {
-				f.usageCount++
-				foundUrls[new.url] = f
-			}
+			ch <- new
 		}
 	}
 }
@@ -152,11 +139,12 @@ func main() {
 	seedUrls := os.Args[1:]
 
 	// Channels
-	chUrls := make(chan NewUrl, 100000)
+	chUrls := make(chan NewUrl, 10000)
+	chWork := make(chan NewUrl, 10000)
 	chFinished := make(chan UrlResponse)
 
 	for w := 1; w <= 10; w++ {
-		go crawl(chUrls, chFinished)
+		go crawl(chWork, chUrls, chFinished)
 	}
 
 	for _, url := range seedUrls {
@@ -168,15 +156,29 @@ func main() {
 	}
 
 	// Subscribe to both channels
-	count = len(seedUrls)
-	for c := 0; c < count; {
+	count := 0
+	for len(chUrls) > 0 || len(chWork) > 0 {
 		select {
+		case url := <-chUrls:
+			// TODO: contemplate cacheing the html, or parse result to enable checking for anchor existance
+			if f, ok := foundUrls[url.url]; !ok {
+				count++
+				foundUrls[url.url] = FoundUrls{
+					usageCount: 1,
+					response:   0,
+				}
+				chWork <- url
+			} else {
+				f.usageCount++
+				foundUrls[url.url] = f
+			}
+			fmt.Printf("(w%d, w%d)", len(chWork), len(chUrls))
+
 		case ret := <-chFinished:
 			info := foundUrls[ret.url]
 			info.response = ret.code
 			info.err = ret.err
 			foundUrls[ret.url] = info
-			c++
 		}
 	}
 
