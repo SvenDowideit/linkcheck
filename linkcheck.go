@@ -25,28 +25,29 @@ func getHref(t html.Token) (ok bool, href string) {
 }
 
 type UrlResponse struct {
-	url string
+	url  string
 	code int
-	err error
+	err  error
 }
 
 type NewUrl struct {
 	from string
-	url string
+	url  string
 }
 
 type FoundUrls struct {
-	response int
+	response   int
 	usageCount int
-	err error
+	err        error
 	// list of pages that refer to the link?
 }
+
 var foundUrls = make(map[string]FoundUrls)
 var count int
 
 func crawl(ch chan NewUrl, chFinished chan UrlResponse) {
 	for true {
-		new := <- ch
+		new := <-ch
 		crawlOne(new, ch, chFinished)
 	}
 }
@@ -54,13 +55,21 @@ func crawl(ch chan NewUrl, chFinished chan UrlResponse) {
 // Extract all http** links from a given webpage
 func crawlOne(req NewUrl, ch chan NewUrl, chFinished chan UrlResponse) {
 	base, err := url.Parse(req.url)
-	reply := UrlResponse {
+	reply := UrlResponse{
 		url: req.url,
+		//from: req.from
 		code: 999,
 	}
 	if err != nil {
 		fmt.Println("ERROR: failed to Parse \"" + req.url + "\"")
 		reply.err = err
+		chFinished <- reply
+		return
+	}
+	switch base.Scheme {
+	case "mailto", "irc":
+		reply.err = fmt.Errorf("%s on page %s", base.Scheme, req.from)
+		reply.code = 900
 		chFinished <- reply
 		return
 	}
@@ -78,14 +87,13 @@ func crawlOne(req NewUrl, ch chan NewUrl, chFinished chan UrlResponse) {
 		chFinished <- reply
 	}()
 
-
 	//fmt.Println("\t crawled \"" + req.url + "\"")
 
 	b := resp.Body
 	defer b.Close() // close Body when the function returns
 
 	// only parse if this page is on the original site
-	if ! strings.HasPrefix(req.url, seedUrl) {
+	if !strings.HasPrefix(req.url, seedUrl) {
 		return
 	}
 
@@ -119,26 +127,27 @@ func crawlOne(req NewUrl, ch chan NewUrl, chFinished chan UrlResponse) {
 			}
 			new := NewUrl{
 				from: req.url,
-				url: base.ResolveReference(u).String(),
-				}
-		// TODO: contemplate cacheing the html, or parse result to enable checking for anchor existance
-		if f, ok := foundUrls[new.url]; !ok {
-			count++
-			foundUrls[new.url] = FoundUrls{
-				usageCount: 1,
-				response:   0,
+				url:  base.ResolveReference(u).String(),
 			}
-			ch <- new
-			//fmt.Printf("(%d)", len(ch))
-		} else {
-			f.usageCount++
-			foundUrls[new.url] = f
-		}
+			// TODO: contemplate cacheing the html, or parse result to enable checking for anchor existance
+			if f, ok := foundUrls[new.url]; !ok {
+				count++
+				foundUrls[new.url] = FoundUrls{
+					usageCount: 1,
+					response:   0,
+				}
+				ch <- new
+				//fmt.Printf("(%d)", len(ch))
+			} else {
+				f.usageCount++
+				foundUrls[new.url] = f
+			}
 		}
 	}
 }
 
 var seedUrl = os.Args[1]
+
 func main() {
 	seedUrls := os.Args[1:]
 
@@ -151,11 +160,11 @@ func main() {
 	}
 
 	for _, url := range seedUrls {
-			new := NewUrl{
-				from: "",
-				url: url,
-			}
-			chUrls <- new
+		new := NewUrl{
+			from: "",
+			url:  url,
+		}
+		chUrls <- new
 	}
 
 	// Subscribe to both channels
@@ -175,14 +184,14 @@ func main() {
 	summary := make(map[int]int)
 	for url, info := range foundUrls {
 		summary[info.response]++
-		if info.response != 200 {
-			fmt.Printf(" - %d: %s\n", info.response, url)
+		if info.response != 200 && info.response != 900 {
+			fmt.Printf(" - %d (%d): %s\n", info.response, info.usageCount, url)
 			fmt.Printf("\t%s\n", info.err)
 		}
 	}
 	fmt.Println("\nFound", len(foundUrls), "unique urls\n")
 	for code, count := range summary {
-		fmt.Printf("\tStatus %d : %d\n", code, count)
+		fmt.Printf("\t\tStatus %d : %d\n", code, count)
 	}
 
 	close(chUrls)
