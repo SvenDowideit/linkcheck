@@ -184,7 +184,7 @@ func main() {
 			f.usageCount++
 			f.from[foundUrl.from]++
 			foundUrls[resourceUrl] = f
-			fmt.Printf("(w%d, w%d)", len(chWork), len(chUrls))
+			// fmt.Printf("(w%d, w%d)", len(chWork), len(chUrls))
 
 		case ret := <-chFinished:
 			info := foundUrls[ret.url]
@@ -196,6 +196,7 @@ func main() {
 	}
 
 	// We're done! Print the results...
+	fmt.Println("\nDone.")
 	summary := make(map[int]int)
 	for url, info := range foundUrls {
 		summary[info.response]++
