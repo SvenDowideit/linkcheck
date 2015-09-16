@@ -158,7 +158,7 @@ func main() {
 
 	// Subscribe to both channels
 	count := 0
-	for len(chUrls) > 0 || len(chWork) > 0 {
+	for len(chUrls) > 0 || count > 0 {
 		select {
 		case foundUrl := <-chUrls:
 			// don't need to check err - its already been checked before its put in the chUrls que
@@ -184,15 +184,16 @@ func main() {
 			f.usageCount++
 			f.from[foundUrl.from]++
 			foundUrls[resourceUrl] = f
-			// fmt.Printf("(w%d, w%d)", len(chWork), len(chUrls))
 
 		case ret := <-chFinished:
+			count--
 			info := foundUrls[ret.url]
 			//info.from[ret.from]++
 			info.response = ret.code
 			info.err = ret.err
 			foundUrls[ret.url] = info
 		}
+		// fmt.Printf("(w%d, u%d, c%d)", len(chWork), len(chUrls), count)
 	}
 
 	// We're done! Print the results...
