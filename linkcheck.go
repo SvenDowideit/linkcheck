@@ -77,7 +77,11 @@ func crawlOne(req NewUrl, ch chan NewUrl, chFinished chan UrlResponse) {
 		chFinished <- reply
 	}()
 
-	//fmt.Println("\t crawled \"" + req.url + "\"")
+	loc, err := resp.Location()
+	if err == nil && req.url != loc.String() {
+		fmt.Printf("\t crawled \"%s\"", req.url)
+		fmt.Printf("\t\t to \"%s\"", loc)
+	}
 
 	b := resp.Body
 	defer b.Close() // close Body when the function returns
