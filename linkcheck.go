@@ -2,11 +2,12 @@ package main
 
 import (
 	"fmt"
-	"golang.org/x/net/html"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
+
+	"golang.org/x/net/html"
 )
 
 // Helper function to pull the href attribute from a Token
@@ -51,6 +52,7 @@ func crawlOne(req NewUrl, ch chan NewUrl, chFinished chan UrlResponse) {
 		from: req.from,
 		code: 999,
 	}
+	fmt.Printf("Crawling: %s\n", req.url)
 	if err != nil {
 		fmt.Println("ERROR: failed to Parse \"" + req.url + "\"")
 		reply.err = err
@@ -129,7 +131,7 @@ func crawlOne(req NewUrl, ch chan NewUrl, chFinished chan UrlResponse) {
 	}
 }
 
-var seedUrl = os.Args[1]
+var seedUrl string
 
 type FoundUrls struct {
 	response   int
@@ -139,7 +141,11 @@ type FoundUrls struct {
 }
 
 func main() {
-	seedUrls := os.Args[1:]
+	if len(os.Args[1:]) == 0 {
+		fmt.Println("Please specify a URL to check")
+		os.Exit(-1)
+	}
+	seedUrl := os.Args[1]
 
 	// Channels
 	chUrls := make(chan NewUrl, 1000)
@@ -152,13 +158,11 @@ func main() {
 		go crawl(chWork, chUrls, chFinished)
 	}
 
-	for _, url := range seedUrls {
-		new := NewUrl{
-			from: "",
-			url:  url,
-		}
-		chUrls <- new
+	new := NewUrl{
+		from: "",
+		url:  seedUrl,
 	}
+	chUrls <- new
 
 	// Subscribe to both channels
 	count := 0
