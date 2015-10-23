@@ -37,6 +37,14 @@ type NewUrl struct {
 	url  string
 }
 
+var skipUrls = map[string]int{
+	"https://build.opensuse.org/project/show/Virtualization:containers": 1,
+	"http://10.0.0.2:5000":                                              1,
+	"https://linux.oracle.com":                                          1,
+	"http://supervisord.org/":                                           1,
+	"http://goo.gl/HSz8UT":                                              1,
+}
+
 func crawl(chWork chan NewUrl, ch chan NewUrl, chFinished chan UrlResponse) {
 	for true {
 		new := <-chWork
@@ -51,6 +59,12 @@ func crawlOne(req NewUrl, ch chan NewUrl, chFinished chan UrlResponse) {
 		url:  req.url,
 		from: req.from,
 		code: 999,
+	}
+	if _, ok := skipUrls[req.url]; ok {
+		fmt.Printf("Skipping: %s\n", req.url)
+		reply.code = 299
+		chFinished <- reply
+		return
 	}
 	fmt.Printf("Crawling: %s\n", req.url)
 	if err != nil {
@@ -145,16 +159,16 @@ func main() {
 		fmt.Println("Please specify a URL to check")
 		os.Exit(-1)
 	}
-	seedUrl := os.Args[1]
+	seedUrl = os.Args[1]
 
 	// Channels
 	chUrls := make(chan NewUrl, 1000)
-	chWork := make(chan NewUrl, 1000)
+	chWork := make(chan NewUrl, 3000)
 	chFinished := make(chan UrlResponse)
 
 	var foundUrls = make(map[string]FoundUrls)
 
-	for w := 1; w <= 10; w++ {
+	for w := 1; w <= 20; w++ {
 		go crawl(chWork, chUrls, chFinished)
 	}
 
@@ -220,12 +234,29 @@ func main() {
 		}
 	}
 	fmt.Println("\nFound", len(foundUrls), "unique urls\n")
-	for code, count := range summary {
-		fmt.Printf("\t\tStatus %d : %d\n", code, count)
+	errorCount := 0
+	explain := map[int]string{
+		900: "mailto or irc",
+		299: "url skipped",
+		200: "ok",
+		404: "forbidden",
+		403: "forbidden",
 	}
+	for code, count := range summary {
+		reason, ok := explain[code]
+		if !ok {
+			// TODO: I presume go has a text error mapping
+			reason = "HTTP code"
+		}
+		fmt.Printf("\t\tStatus %d : %d - %s\n", code, count, reason)
+		if code != 200 && code != 299 && code != 900 {
+			errorCount += count
+		}
+	}
+	fmt.Println("\nError Count:", errorCount)
 
 	close(chUrls)
 
 	// return the number of 404's to show that there are things to be fixed
-	os.Exit(summary[404])
+	os.Exit(errorCount)
 }

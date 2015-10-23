@@ -17,7 +17,7 @@ docker:
 	docker run --name linkcheck-build linkcheck gzip linkcheck
 	docker cp linkcheck-build:/go/src/github.com/SvenDowideit/linkcheck/linkcheck.gz .
 	docker rm linkcheck-build
-	gunzip linkcheck.gz
+	gunzip -f linkcheck.gz
 
 run:
 	./linkcheck http://10.10.10.20:8000/
