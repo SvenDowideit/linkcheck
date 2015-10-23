@@ -10,18 +10,14 @@ import (
 	"golang.org/x/net/html"
 )
 
-// Helper function to pull the href attribute from a Token
-func getHref(t html.Token) (ok bool, href string) {
-	// Iterate over all of the Token's attributes until we find an "href"
+func getAttr(t html.Token, name string) (ok bool, href string) {
 	for _, a := range t.Attr {
-		if a.Key == "href" {
+		if a.Key == name {
 			href = a.Val
 			ok = true
 		}
 	}
 
-	// "bare" return will return the variables (ok, href) as defined in
-	// the function definition
 	return
 }
 
@@ -113,24 +109,32 @@ func crawlOne(req NewUrl, ch chan NewUrl, chFinished chan UrlResponse) {
 	for {
 		tt := z.Next()
 
-		switch {
-		case tt == html.ErrorToken:
+		switch tt {
+		case html.ErrorToken:
 			// End of the document, we're done
 			return
-		case tt == html.StartTagToken:
+		case html.StartTagToken, html.SelfClosingTagToken:
 			t := z.Token()
+			var ok bool
+			var newUrl string
 
-			// Check if the token is an <a> tag
-			isAnchor := t.Data == "a"
-			if !isAnchor {
+			switch t.Data {
+			case "a", "link":
+				ok, newUrl = getAttr(t, "href")
+				if !ok {
+					continue
+				}
+				break
+			case "img", "script":
+				ok, newUrl = getAttr(t, "src")
+				if !ok {
+					continue
+				}
+				break
+			default:
 				continue
 			}
 
-			// Extract the href value, if there is one
-			ok, newUrl := getHref(t)
-			if !ok {
-				continue
-			}
 			u, e := url.Parse(newUrl)
 			if e != nil {
 				fmt.Println("ERROR: failed to Parse \"" + newUrl + "\"")
