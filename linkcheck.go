@@ -156,10 +156,14 @@ type FoundUrls struct {
 
 func main() {
 	if len(os.Args[1:]) == 0 {
-		fmt.Println("Please specify a URL to check")
-		os.Exit(-1)
+		seedUrl = os.Getenv("CHECKURL")
+		if seedUrl == "" {
+			fmt.Println("Please specify a URL to check")
+			os.Exit(-1)
+		}
+	} else {
+		seedUrl = os.Args[1]
 	}
-	seedUrl = os.Args[1]
 
 	// Channels
 	chUrls := make(chan NewUrl, 1000)
