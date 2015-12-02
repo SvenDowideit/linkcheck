@@ -44,12 +44,12 @@ var skipUrls = map[string]int{
 func crawl(chWork chan NewUrl, ch chan NewUrl, chFinished chan UrlResponse) {
 	for true {
 		new := <-chWork
-		crawlOne(new, ch, chFinished)
+		chFinished <- crawlOne(new, ch, chFinished)
 	}
 }
 
 // Extract all http** links from a given webpage
-func crawlOne(req NewUrl, ch chan NewUrl, chFinished chan UrlResponse) {
+func crawlOne(req NewUrl, ch chan NewUrl, chFinished chan UrlResponse) UrlResponse {
 	base, err := url.Parse(req.url)
 	reply := UrlResponse{
 		url:  req.url,
@@ -59,40 +59,50 @@ func crawlOne(req NewUrl, ch chan NewUrl, chFinished chan UrlResponse) {
 	if _, ok := skipUrls[req.url]; ok {
 		fmt.Printf("Skipping: %s\n", req.url)
 		reply.code = 299
-		chFinished <- reply
-		return
+		return reply
 	}
 	fmt.Printf("Crawling: %s\n", req.url)
 	if err != nil {
 		fmt.Println("ERROR: failed to Parse \"" + req.url + "\"")
 		reply.err = err
-		chFinished <- reply
-		return
+		return reply
 	}
 	switch base.Scheme {
 	case "mailto", "irc":
 		reply.err = fmt.Errorf("%s on page %s", base.Scheme, req.from)
 		reply.code = 900
-		chFinished <- reply
-		return
+		return reply
 	}
 	resp, err := http.Get(req.url)
 	if err != nil {
 		fmt.Println("ERROR: Failed to crawl \"" + req.url + "\"  " + err.Error())
 		reply.err = err
-		chFinished <- reply
-		return
+		return reply
 	}
-	defer func() {
-		// Notify that we're done after this function
-		reply.code = resp.StatusCode
-		chFinished <- reply
-	}()
 
-	loc, err := resp.Location()
-	if err == nil && req.url != loc.String() {
-		fmt.Printf("\t crawled \"%s\"", req.url)
-		fmt.Printf("\t\t to \"%s\"", loc)
+	if resp.ContentLength < 10 {
+		// Don't really care if we're getting a small response from other sites
+		// Lots of them are bot-protection
+		if !strings.HasPrefix(req.url, seedUrl) {
+			reply.code = 901
+			return reply
+		}
+		reply.err = fmt.Errorf("ERROR: content too small: %d (%s)", resp.ContentLength, req.url)
+		reply.code = 888
+		return reply
+	}
+	reply.code = resp.StatusCode
+
+	//fmt.Printf("\t crawled \"%s\", got %d\n", req.url, resp.StatusCode)
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		reply.err = fmt.Errorf("ERROR: non 2xx response code: %d (%s)", resp.StatusCode, req.url)
+		return reply
+	}
+
+	if req.url != resp.Request.URL.String() {
+		fmt.Printf("\t\t redirected to \"%s\"\n", resp.Request.URL.String())
+		base = resp.Request.URL
 	}
 
 	b := resp.Body
@@ -100,8 +110,16 @@ func crawlOne(req NewUrl, ch chan NewUrl, chFinished chan UrlResponse) {
 
 	// only parse if this page is on the original site
 	// if we moved this check back to the main loop, we'd parse more sites
-	if !strings.HasPrefix(req.url, seedUrl) {
-		return
+	if !strings.HasPrefix(base.String(), seedUrl) {
+		fmt.Printf("skipping URL does not start with original seedUrl\n")
+		reply.code = 901
+		return reply
+	}
+	if strings.HasSuffix(base.String(), ".png") ||
+		strings.HasSuffix(base.String(), ".css") ||
+		strings.HasSuffix(base.String(), ".js") {
+		fmt.Println("not html")
+		return reply
 	}
 
 	z := html.NewTokenizer(b)
@@ -112,7 +130,7 @@ func crawlOne(req NewUrl, ch chan NewUrl, chFinished chan UrlResponse) {
 		switch tt {
 		case html.ErrorToken:
 			// End of the document, we're done
-			return
+			return reply
 		case html.StartTagToken, html.SelfClosingTagToken:
 			t := z.Token()
 			var ok bool
@@ -140,13 +158,18 @@ func crawlOne(req NewUrl, ch chan NewUrl, chFinished chan UrlResponse) {
 				fmt.Println("ERROR: failed to Parse \"" + newUrl + "\"")
 				continue
 			}
+			if !u.IsAbs() {
+				u = base.ResolveReference(u)
+				//fmt.Println("NewUrl not Abs (%s) converted to %s\n", newUrl, u.String())
+			}
 			new := NewUrl{
 				from: req.url,
-				url:  base.ResolveReference(u).String(),
+				url:  u.String(),
 			}
 			ch <- new
 		}
 	}
+	return reply
 }
 
 var seedUrl string
@@ -176,7 +199,7 @@ func main() {
 
 	var foundUrls = make(map[string]FoundUrls)
 
-	for w := 1; w <= 20; w++ {
+	for w := 1; w <= 50; w++ {
 		go crawl(chWork, chUrls, chFinished)
 	}
 
@@ -223,7 +246,7 @@ func main() {
 			info.err = ret.err
 			foundUrls[ret.url] = info
 		}
-		// fmt.Printf("(w%d, u%d, c%d)", len(chWork), len(chUrls), count)
+		// fmt.Printf("(w%d, u%d, c%d) - total %d\n", len(chWork), len(chUrls), count, len(foundUrls))
 	}
 
 	// We're done! Print the results...
@@ -231,7 +254,9 @@ func main() {
 	summary := make(map[int]int)
 	for url, info := range foundUrls {
 		summary[info.response]++
-		if info.response != 200 && info.response != 900 {
+		if info.response != 200 &&
+			info.response != 900 &&
+			info.response != 901 {
 			fmt.Printf(" - %d (%d): %s\n", info.response, info.usageCount, url)
 			if info.err != nil {
 				fmt.Printf("\t%s\n", info.err)
@@ -245,10 +270,12 @@ func main() {
 	errorCount := 0
 	explain := map[int]string{
 		900: "mailto or irc",
-		299: "url skipped",
+		901: "url skipped not below seedUrl",
+		299: "url skipped - in skiplist",
 		200: "ok",
 		404: "forbidden",
 		403: "forbidden",
+		888: "reply too small",
 	}
 	for code, count := range summary {
 		reason, ok := explain[code]
@@ -257,7 +284,10 @@ func main() {
 			reason = "HTTP code"
 		}
 		fmt.Printf("\t\tStatus %d : %d - %s\n", code, count, reason)
-		if code != 200 && code != 299 && code != 900 {
+		if code != 200 &&
+			code != 299 &&
+			code != 900 &&
+			code != 901 {
 			errorCount += count
 		}
 	}
