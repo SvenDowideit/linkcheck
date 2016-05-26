@@ -104,6 +104,12 @@ func crawlOne(req NewUrl, ch chan NewUrl, chFinished chan UrlResponse) {
 		return
 	}
 
+	// don't parse js files..
+	if strings.HasSuffix(req.url, ".js") || strings.HasSuffix(req.url, ".js") {
+		return
+	}
+
+	// TODO: it seems to sucessfully parse non-html (like js/css)
 	z := html.NewTokenizer(b)
 
 	for {
@@ -119,18 +125,29 @@ func crawlOne(req NewUrl, ch chan NewUrl, chFinished chan UrlResponse) {
 			var newUrl string
 
 			switch t.Data {
+			case "base":
+				// use the actual baseUrl set in the html file
+				ok, baseUrl := getAttr(t, "href")
+				if !ok {
+					continue
+				}
+
+				newBase, err := url.Parse(baseUrl)
+				if err != nil {
+					continue
+				}
+				base = base.ResolveReference(newBase)
+				continue
 			case "a", "link":
 				ok, newUrl = getAttr(t, "href")
 				if !ok {
 					continue
 				}
-				break
 			case "img", "script":
 				ok, newUrl = getAttr(t, "src")
 				if !ok {
 					continue
 				}
-				break
 			default:
 				continue
 			}
