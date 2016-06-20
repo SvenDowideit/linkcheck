@@ -35,10 +35,12 @@ type NewUrl struct {
 
 var skipUrls = map[string]int{
 	"https://build.opensuse.org/project/show/Virtualization:containers": 1,
+	"https://build.opensuse.org/":                                       1,
 	"http://10.0.0.2:5000":                                              1,
 	"https://linux.oracle.com":                                          1,
 	"http://supervisord.org/":                                           1,
 	"http://goo.gl/HSz8UT":                                              1,
+	"https://www.linkedin.com/company/docker":                           1,
 }
 
 func crawl(chWork chan NewUrl, ch chan NewUrl, chFinished chan UrlResponse) {
