@@ -1,4 +1,4 @@
-FROM golang:1.4-cross
+FROM golang
 
 ENV GOPATH /go
 ENV USER root
