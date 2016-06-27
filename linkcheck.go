@@ -36,11 +36,13 @@ type NewUrl struct {
 var skipUrls = map[string]int{
 	"https://build.opensuse.org/project/show/Virtualization:containers": 1,
 	"https://build.opensuse.org/":                                       1,
-	"http://10.0.0.2:5000":                                              1,
 	"https://linux.oracle.com":                                          1,
 	"http://supervisord.org/":                                           1,
 	"http://goo.gl/HSz8UT":                                              1,
 	"https://www.linkedin.com/company/docker":                           1,
+	"https://cloud.docker.com/stack/deploy/":                            1,
+	"https://cloud.docker.com/account/":                                 1,
+	"https://reddit.com/r/docker":                                       1,
 }
 
 func crawl(chWork chan NewUrl, ch chan NewUrl, chFinished chan UrlResponse) {
@@ -255,8 +257,14 @@ func main() {
 			if info.err != nil {
 				fmt.Printf("\t%s\n", info.err)
 			}
+			limit := 5
 			for from, count := range info.from {
+				limit--
 				fmt.Printf("\t\t%d times from %s\n", count, from)
+				if limit <= 0 {
+					fmt.Printf("\t\tNOT SHOWING ALL - please use grep\n")
+					break
+				}
 			}
 		}
 	}
