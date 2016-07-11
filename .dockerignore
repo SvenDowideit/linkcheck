@@ -1,0 +1,9 @@
+Makefile
+Dockerfile
+.dockerignore
+linkcheck.zip
+linkcheck
+linkcheck.app
+linkcheck.exe
+README.md
+LICENSE

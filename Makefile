@@ -12,15 +12,10 @@ build:
 	go build -o hugo main.go
 
 docker:
-	rm -f linkcheck.gz
 	docker build -t linkcheck .
-	docker run --name linkcheck-build linkcheck gzip linkcheck
-	docker cp linkcheck-build:/go/src/github.com/SvenDowideit/linkcheck/linkcheck.gz .
-	docker rm linkcheck-build
-	gunzip -f linkcheck.gz
+	rm -f linkcheck.gz
+	docker rm linkcheck-build || true
+	docker run --name linkcheck-build linkcheck ls
+	docker cp linkcheck-build:/go/src/github.com/SvenDowideit/linkcheck/linkcheck.zip .
+	unzip -o linkcheck.zip
 
-run:
-	./linkcheck http://10.10.10.20:8000/
-
-post:
-	./linkcheck https://docs.docker.com
