@@ -23,7 +23,7 @@ docker:
 	docker cp linkcheck-build:/go/src/github.com/SvenDowideit/linkcheck/linkcheck.zip .
 	unzip -o linkcheck.zip
 
-RELEASE_DATE=`date +%FT%T%z`
+RELEASE_DATE=`date +%F`
 
 release: docker
 	# TODO: check that we have upstream master, bail if not
