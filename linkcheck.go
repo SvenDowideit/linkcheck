@@ -43,6 +43,7 @@ var skipUrls = map[string]int{
 	"https://cloud.docker.com/stack/deploy/":                            1,
 	"https://cloud.docker.com/account/":                                 1,
 	"https://reddit.com/r/docker":                                       1,
+	"https://www.reddit.com/r/docker":                                   1,
 }
 
 func crawl(chWork chan NewUrl, ch chan NewUrl, chFinished chan UrlResponse) {
@@ -66,7 +67,7 @@ func crawlOne(req NewUrl, ch chan NewUrl, chFinished chan UrlResponse) {
 		chFinished <- reply
 		return
 	}
-	fmt.Printf("Crawling: %s\n", req.url)
+	//fmt.Printf("\tCrawling: %s\n", req.url)
 	if err != nil {
 		fmt.Println("ERROR: failed to Parse \"" + req.url + "\"")
 		reply.err = err
@@ -197,6 +198,7 @@ func main() {
 
 	var foundUrls = make(map[string]FoundUrls)
 
+	fmt.Printf("Starting to Crawl\n")
 	for w := 1; w <= 20; w++ {
 		go crawl(chWork, chUrls, chFinished)
 	}
@@ -223,6 +225,9 @@ func main() {
 			f, ok := foundUrls[resourceUrl]
 			if !ok {
 				count++
+				if count % 100 == 0 {
+					fmt.Printf("\tfound %d unique links so far\n", count)
+				}
 				f.usageCount = 0
 				f.response = 0
 				f.from = make(map[string]int)
@@ -247,36 +252,43 @@ func main() {
 		// fmt.Printf("(w%d, u%d, c%d)", len(chWork), len(chUrls), count)
 	}
 
+	explain := map[int]string{
+		900: "mailto or irc",
+		299: "skipped",
+		200: "ok",
+		404: "forbidden",
+		403: "forbidden",
+	}
+
 	// We're done! Print the results...
 	fmt.Println("\nDone.")
 	summary := make(map[int]int)
 	for url, info := range foundUrls {
 		summary[info.response]++
 		if info.response != 200 && info.response != 900 {
-			fmt.Printf(" - %d (%d): %s\n", info.response, info.usageCount, url)
+			reason, ok := explain[info.response]
+			if !ok {
+				reason = fmt.Sprintf("%d", info.response)
+			}
+			fmt.Printf(" - %s (%d): %s\n", reason, info.usageCount, url)
 			if info.err != nil {
 				fmt.Printf("\t%s\n", info.err)
 			}
-			limit := 5
-			for from, count := range info.from {
-				limit--
-				fmt.Printf("\t\t%d times from %s\n", count, from)
-				if limit <= 0 {
-					fmt.Printf("\t\tNOT SHOWING ALL - please use grep\n")
-					break
+			if info.response != 299 {
+				limit := 5
+				for from, count := range info.from {
+					limit--
+					fmt.Printf("\t\t%d times from %s\n", count, from)
+					if limit <= 0 {
+						fmt.Printf("\t\tNOT SHOWING ALL - please use grep\n")
+						break
+					}
 				}
 			}
 		}
 	}
 	fmt.Println("\nFound", len(foundUrls), "unique urls\n")
 	errorCount := 0
-	explain := map[int]string{
-		900: "mailto or irc",
-		299: "url skipped",
-		200: "ok",
-		404: "forbidden",
-		403: "forbidden",
-	}
 	for code, count := range summary {
 		reason, ok := explain[code]
 		if !ok {

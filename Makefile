@@ -8,19 +8,36 @@ COMMIT_HASH=`git rev-parse --short HEAD 2>/dev/null`
 BUILD_DATE=`date +%FT%T%z`
 LDFLAGS=-ldflags "-X github.com/spf13/hugo/hugolib.CommitHash=${COMMIT_HASH} -X github.com/spf13/hugo/hugolib.BuildDate=${BUILD_DATE}"
 
+AWSTOKENSFILE ?= ../aws.env
+-include $(AWSTOKENSFILE)
+export GITHUB_USERNAME GITHUB_TOKEN
+
 build:
 	go build -o hugo main.go
 
 docker:
-	rm -f linkcheck.gz
 	docker build -t linkcheck .
-	docker run --name linkcheck-build linkcheck gzip linkcheck
-	docker cp linkcheck-build:/go/src/github.com/SvenDowideit/linkcheck/linkcheck.gz .
-	docker rm linkcheck-build
-	gunzip -f linkcheck.gz
+	rm -f linkcheck.gz
+	docker rm linkcheck-build || true
+	docker run --name linkcheck-build linkcheck ls
+	docker cp linkcheck-build:/go/src/github.com/SvenDowideit/linkcheck/linkcheck.zip .
+	unzip -o linkcheck.zip
 
-run:
-	./linkcheck http://10.10.10.20:8000/
+RELEASE_DATE=`date +%FT%T%z`
 
-post:
-	./linkcheck https://docs.docker.com
+release: docker
+	# TODO: check that we have upstream master, bail if not
+	docker run --rm -it -e GITHUB_TOKEN linkcheck \
+		github-release release --user docker --repo linkcheck --tag $(RELEASE_DATE)
+	docker run --rm -it -e GITHUB_TOKEN linkcheck \
+		github-release upload --user docker --repo linkcheck --tag $(RELEASE_DATE) \
+			--name linkcheck \
+			--file linkcheck
+	docker run --rm -it -e GITHUB_TOKEN linkcheck \
+		github-release upload --user docker --repo linkcheck --tag $(RELEASE_DATE) \
+			--name linkcheck-osx \
+			--file linkcheck.app
+	docker run --rm -it -e GITHUB_TOKEN linkcheck \
+		github-release upload --user docker --repo linkcheck --tag $(RELEASE_DATE) \
+			--name linkcheck.exe \
+			--file linkcheck.exe
