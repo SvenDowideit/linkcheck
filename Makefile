@@ -17,7 +17,7 @@ build:
 
 docker:
 	docker build -t linkcheck .
-	rm -f linkcheck.gz
+	rm -f linkcheck.zip
 	docker rm linkcheck-build || true
 	docker run --name linkcheck-build linkcheck ls
 	docker cp linkcheck-build:/go/src/github.com/SvenDowideit/linkcheck/linkcheck.zip .

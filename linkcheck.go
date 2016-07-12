@@ -44,6 +44,8 @@ var skipUrls = map[string]int{
 	"https://cloud.docker.com/account/":                                 1,
 	"https://reddit.com/r/docker":                                       1,
 	"https://www.reddit.com/r/docker":                                   1,
+	"https://godoc.org/golang.org/x/crypto/ssh":                         1,
+	"https://letsencrypt.org/how-it-works/":                             1,
 }
 
 func crawl(chWork chan NewUrl, ch chan NewUrl, chFinished chan UrlResponse) {
@@ -270,7 +272,11 @@ func main() {
 			if !ok {
 				reason = fmt.Sprintf("%d", info.response)
 			}
-			fmt.Printf(" - %s (%d): %s\n", reason, info.usageCount, url)
+			if info.response == 299 {
+				fmt.Printf("       %s (%d): %s\n", reason, info.usageCount, url)
+			} else {
+				fmt.Printf("ERROR: %s (%d): %s\n", reason, info.usageCount, url)
+			}
 			if info.err != nil {
 				fmt.Printf("\t%s\n", info.err)
 			}
