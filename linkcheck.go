@@ -48,6 +48,7 @@ var skipUrls = map[string]int{
 	"https://letsencrypt.org/how-it-works/":                                        1,
 	"https://cloud.google.com/compute/docs/disks/persistent-disks":                 1,
 	"https://godoc.org/github.com/docker/distribution/notifications#RequestRecord": 1,
+	"https://support.docker.com":                                                   1,
 }
 
 func crawl(chWork chan NewUrl, ch chan NewUrl, chFinished chan UrlResponse) {
@@ -87,7 +88,8 @@ func crawlOne(req NewUrl, ch chan NewUrl, chFinished chan UrlResponse) {
 	}
 	resp, err := http.Get(req.url)
 	if err != nil {
-		fmt.Println("ERROR: Failed to crawl \"" + req.url + "\"  " + err.Error())
+		fmt.Println("Warning: Failed to crawl \"" + req.url + "\"  " + err.Error())
+		reply.code = 888
 		reply.err = err
 		chFinished <- reply
 		return
@@ -262,6 +264,7 @@ func main() {
 		200: "ok",
 		404: "forbidden",
 		403: "forbidden",
+		888: "http client failuer",
 	}
 
 	// We're done! Print the results...
@@ -304,7 +307,7 @@ func main() {
 			reason = "HTTP code"
 		}
 		fmt.Printf("\t\tStatus %d : %d - %s\n", code, count, reason)
-		if code != 200 && code != 299 && code != 900 {
+		if code != 200 && code != 299 && code != 900  && code != 888 {
 			errorCount += count
 		}
 	}
